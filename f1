@@ -1,4 +1,76 @@
+---
+- name: To install Git on the managed node
+  hosts: dockerhost
+  become: true
+  tasks:
+    - name: Install Git
+      yum:
+        name: git
+        state: present
+...
+---
+- name: To install WebServer  on the managed node
+  hosts: dockerhost
+  become: true
+  tasks:
+    - name: Install WebServer
+      yum:
+        name: nginx
+        state: present
+    - name: Start the WebServer
+      service:
+        name: nginx
+        state: started
+...
+---
+- name: Deploy WAR file in Tomcat Docker Container
+  hosts: dockerhost
+  become: true
+  vars:
+    war_file: /var/lib/jenkins/workspace/sample-webapp/target/sample-webapp.war
+    container_name: tomcat1-container
+    image_name: tomcat:latest
+    host_port: 8083
+  tasks:
+    - name: Ensure Docker is installed
+      yum:
+        name: docker
+        state: present
+    - name: Ensure Docker service is running
+      service:
+        name: docker
+        state: started
+        enabled: yes
+    - name: Remove any existing container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: absent
+        force_kill: true
+    - name: Run new Tomcat container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        image: "{{ image_name }}"
+        ports:
+          - "{{ host_port }}:8080"
+        state: started
+        restart_policy: always
+    - name: Copy Tomcat default apps into webapps
+      command: >
+        docker exec {{ container_name }} bash -c
+        "cp -r /usr/local/tomcat/webapps.dist/* /usr/local/tomcat/webapps"
+      ignore_errors: yes
+    - name: Copy WAR file to remote EC2
+      copy:
+        src: "{{ war_file }}"
+        dest: /tmp/sample-webapp.war
+    - name: Copy WAR file into container
+      command: >
+        docker cp /tmp/sample-webapp.war {{ container_name }}:/usr/local/tomcat/webapps
+    - name: Restart Tomcat Container
+      community.docker.docker_container:
+        name: "{{ container_name }}"
+        state: started
+        restart: true
+...
 
-ne
-this is 1
 
